@@ -196,4 +196,6 @@
     <string name="read_word_file">Word 文件解析</string>
     <string name="analyze_uploaded_word">请阅读并分析上传的 Word 文件</string>
     <string name="uploaded_files">上传文件：</string>
+    <string name="analyze_uploaded_document">Analyze the uploaded PDF or Word document</string>
+    <string name="document_files_only">Only PDF and DOCX files are supported</string>
 </resources>

@@ -37,7 +37,7 @@ public final class WordParse {
         }
     }
 
-    static String parse(InputStream input) throws Exception {
+    public static String parse(InputStream input) throws Exception {
         try (ZipInputStream zip = new ZipInputStream(input)) {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {

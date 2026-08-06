@@ -29,6 +29,7 @@ import java.io.OutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -316,6 +317,31 @@ public final class AgentRepository {
             default:
                 throw new IllegalArgumentException("不支持的文件操作: " + action);
         }
+    }
+
+    /**
+     * Opens a file inside the already authorized workspace without exposing the
+     * underlying path or bypassing the workspace boundary.
+     */
+    public InputStream openWorkspaceFile(String path) throws Exception {
+        if (hasBroadStorageAccess()) {
+            File root = Environment.getExternalStorageDirectory().getCanonicalFile();
+            File target = resolveBroadFile(root, path);
+            if (!target.isFile()) throw new IllegalArgumentException("不是文件: " + path);
+            return new FileInputStream(target);
+        }
+        AgentSettings settings = getSettings();
+        if (settings.workspaceTreeUri == null || settings.workspaceTreeUri.isEmpty()) {
+            throw new IllegalStateException("未开启工作区访问权限");
+        }
+        Uri target = resolveDocument(Uri.parse(settings.workspaceTreeUri), path, false);
+        String mimeType = context.getContentResolver().getType(target);
+        if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mimeType)) {
+            throw new IllegalArgumentException("不是文件: " + path);
+        }
+        InputStream input = context.getContentResolver().openInputStream(target);
+        if (input == null) throw new IllegalArgumentException("无法读取文件: " + path);
+        return input;
     }
 
     public boolean hasBroadStorageAccess() {

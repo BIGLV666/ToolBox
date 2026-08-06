@@ -75,6 +75,10 @@ public final class AgentClient {
 
     public interface FileReader {
         FileChunk read(String fileId, int offset, int maxChars) throws Exception;
+
+        default FileChunk readPath(String path, int offset, int maxChars) throws Exception {
+            throw new UnsupportedOperationException("Workspace document reading is unavailable");
+        }
     }
 
     public static final class FileChunk {
@@ -93,6 +97,19 @@ public final class AgentClient {
             this.totalChars = totalChars;
             this.hasMore = offset + content.length() < totalChars;
         }
+    }
+
+    private static String documentFilesPrompt(List<FileAttachment> files) {
+        StringBuilder prompt = new StringBuilder(
+                "The user uploaded PDF or DOCX documents for this turn. "
+                        + "Call read_document with file_id before answering about document contents. "
+                        + "Do not guess contents. Uploaded files are available only in this turn.");
+        for (FileAttachment file : files) {
+            prompt.append("\n- file_id=").append(file.id)
+                    .append(", name=").append(file.name)
+                    .append(", mime_type=").append(file.mimeType);
+        }
+        return prompt.toString();
     }
 
     private static String uploadedFilesPrompt(List<FileAttachment> files) {
@@ -158,8 +175,11 @@ public final class AgentClient {
                          ? "\n需要联网信息时调用 network_search，不要凭记忆假装已经搜索。" : "")));
         if (files != null && !files.isEmpty()) {
             messages.put(new JSONObject().put("role", "system").put("content",
-                    uploadedFilesPrompt(files)));
+                    documentFilesPrompt(files)));
         }
+        messages.put(new JSONObject().put("role", "system").put("content",
+                "Use workspace_shell to locate files. For PDF or DOCX contents, do not use "
+                        + "workspace_shell read; call read_document with the workspace-relative path."));
         for (AgentRepository.ChatMessage message : history) {
             if ("user".equals(message.role) || "assistant".equals(message.role)) {
                 messages.put(new JSONObject().put("role", message.role).put("content", message.content));
@@ -391,8 +411,11 @@ public final class AgentClient {
                          ? "\n需要联网信息时调用 network_search。" : "")));
         if (files != null && !files.isEmpty()) {
             input.put(new JSONObject().put("role", "developer").put("content",
-                    uploadedFilesPrompt(files)));
+                    documentFilesPrompt(files)));
         }
+        input.put(new JSONObject().put("role", "developer").put("content",
+                "Use workspace_shell to locate files. For PDF or DOCX contents, call read_document "
+                        + "with the workspace-relative path instead of reading the binary file as text."));
         for (AgentRepository.ChatMessage message : history) {
             if ("user".equals(message.role) || "assistant".equals(message.role)) {
                 input.put(new JSONObject().put("role", message.role).put("content", message.content));
@@ -432,6 +455,7 @@ public final class AgentClient {
         if (enableLocalTools) {
             tools.put(responseNoteTool());
             tools.put(responseWorkspaceTool());
+            tools.put(responseDocumentTool());
             if (tinyFishKey != null && !tinyFishKey.isEmpty()) tools.put(responseSearchTool());
             if (includeFiles) tools.put(responseWordTool());
         }
@@ -600,6 +624,12 @@ public final class AgentClient {
                 .put("parameters", workspaceParameters()).put("strict", true);
     }
 
+    private static JSONObject responseDocumentTool() throws JSONException {
+        return new JSONObject().put("type", "function").put("name", "read_document")
+                .put("description", "Parse PDF or DOCX text from an uploaded file_id or an authorized workspace path")
+                .put("parameters", documentParameters()).put("strict", true);
+    }
+
     private static JSONObject responseWordTool() throws JSONException {
         JSONObject parameters = new JSONObject().put("type", "object")
                 .put("properties", new JSONObject()
@@ -626,6 +656,9 @@ public final class AgentClient {
         }
         if ("workspace_shell".equals(call.name)) {
             return executeWorkspace(args, repository, listener);
+        }
+        if ("read_document".equals(call.name)) {
+            return executeDocumentTool(args, files, fileReader);
         }
         if ("read_word_file".equals(call.name)) {
             return executeWordTool(args, files, fileReader);
@@ -706,6 +739,8 @@ public final class AgentClient {
                         .put("schema", "note(note_id,title,content,folder_id,folder_name,created_at,updated_at)");
             case "read_word_file":
                 return executeWordTool(arguments, files, fileReader);
+            case "read_document":
+                return executeDocumentTool(arguments, files, fileReader);
             case "network_search":
                 String webQuery = arguments.optString("query", "").trim();
                 if (webQuery.isEmpty()) throw new IllegalArgumentException("搜索词不能为空");
@@ -747,6 +782,54 @@ public final class AgentClient {
         }
     }
 
+    private static JSONObject executeDocumentTool(JSONObject arguments, List<FileAttachment> files,
+                                                  FileReader fileReader) throws JSONException {
+        if (fileReader == null) {
+            return new JSONObject().put("success", false)
+                    .put("error", "Document reader is unavailable");
+        }
+        String fileId = arguments.optString("file_id", "").trim();
+        String path = arguments.optString("path", "").trim();
+        if (fileId.isEmpty() == path.isEmpty()) {
+            return new JSONObject().put("success", false)
+                    .put("error", "Provide exactly one of file_id or path");
+        }
+        int offset = Math.max(0, arguments.optInt("offset", 0));
+        int maxChars = Math.max(100, Math.min(arguments.optInt("max_chars", 12000), 20000));
+        try {
+            FileChunk chunk;
+            String source;
+            if (!fileId.isEmpty()) {
+                FileAttachment match = null;
+                if (files != null) {
+                    for (FileAttachment file : files) {
+                        if (file.id.equals(fileId)) {
+                            match = file;
+                            break;
+                        }
+                    }
+                }
+                if (match == null) {
+                    return new JSONObject().put("success", false)
+                            .put("error", "Uploaded file ID does not exist");
+                }
+                chunk = fileReader.read(fileId, offset, maxChars);
+                source = "upload";
+            } else {
+                chunk = fileReader.readPath(path, offset, maxChars);
+                source = "workspace";
+            }
+            return new JSONObject().put("success", true).put("source", source)
+                    .put("file_id", chunk.fileId).put("name", chunk.name)
+                    .put("offset", chunk.offset).put("total_chars", chunk.totalChars)
+                    .put("has_more", chunk.hasMore).put("content", chunk.content);
+        } catch (Exception error) {
+            return new JSONObject().put("success", false)
+                    .put("error", error.getMessage() == null
+                            ? "Document parsing failed" : error.getMessage());
+        }
+    }
+
     static boolean allowsExpandedNoteResults(List<AgentRepository.ChatMessage> history) {
         String prompt = "";
         for (int i = history.size() - 1; i >= 0; i--) {
@@ -775,6 +858,9 @@ public final class AgentClient {
      */
     private static JSONArray toolDefinitions(boolean includeNetworkSearch, boolean includeFiles) throws JSONException {
         JSONArray tools = new JSONArray();
+        tools.put(tool("read_document",
+                "Parse PDF or DOCX text. Use file_id for uploads, or path for an authorized workspace file.",
+                documentParameters()));
         tools.put(tool("get_current_time", "获取手机当前日期、时间和时区", new JSONObject()));
         tools.put(tool("get_device_info", "获取当前手机型号和 Android 版本", new JSONObject()));
         tools.put(tool("list_toolbox_modules", "列出 ToolBox 当前可用模块", new JSONObject()));
@@ -818,6 +904,21 @@ public final class AgentClient {
         tools.put(tool("workspace_shell", "在用户授权的公共目录内执行受限文件操作",
                 workspaceParameters()));
         return tools;
+    }
+
+    private static JSONObject documentParameters() throws JSONException {
+        return new JSONObject().put("type", "object")
+                .put("properties", new JSONObject()
+                        .put("file_id", new JSONObject().put("type", "string")
+                                .put("description", "Uploaded document ID, or empty when path is used"))
+                        .put("path", new JSONObject().put("type", "string")
+                                .put("description", "Workspace-relative PDF or DOCX path, or empty when file_id is used"))
+                        .put("offset", new JSONObject().put("type", "integer").put("minimum", 0))
+                        .put("max_chars", new JSONObject().put("type", "integer")
+                                .put("minimum", 100).put("maximum", 20000)))
+                .put("required", new JSONArray().put("file_id").put("path")
+                        .put("offset").put("max_chars"))
+                .put("additionalProperties", false);
     }
 
     private static JSONObject workspaceParameters() throws JSONException {

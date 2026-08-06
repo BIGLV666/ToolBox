@@ -37,6 +37,7 @@ import com.example.toolbox.note.MarkdownRenderer;
 import com.example.toolbox.Password.model.Password;
 import com.example.toolbox.Password.service.PasswordService;
 import com.example.toolbox.util.SwipeBackHelper;
+import com.example.toolbox.util.PdfParse;
 import com.example.toolbox.util.WordParse;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
@@ -46,6 +47,7 @@ import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -66,9 +68,9 @@ public final class AgentActivity extends AppCompatActivity {
     private final ExecutorService localExecutor = Executors.newSingleThreadExecutor();
     private final AgentClient client = new AgentClient();
     private final List<AgentRepository.ModelOption> models = new ArrayList<>();
-    private final List<UploadedWord> pendingFiles = new ArrayList<>();
-    private final ActivityResultLauncher<String[]> wordPicker = registerForActivityResult(
-            new ActivityResultContracts.OpenMultipleDocuments(), this::onWordFilesSelected);
+    private final List<UploadedDocument> pendingFiles = new ArrayList<>();
+    private final ActivityResultLauncher<String[]> documentPicker = registerForActivityResult(
+            new ActivityResultContracts.OpenMultipleDocuments(), this::onDocumentFilesSelected);
     private AgentRepository repository;
     private PasswordService passwordService;
     private AgentMessageAdapter adapter;
@@ -94,6 +96,34 @@ public final class AgentActivity extends AppCompatActivity {
     private boolean storageAccessPromptShown;
     private View attachmentStrip;
     private LinearLayout attachmentList;
+
+    private AgentClient.FileChunk readWorkspaceDocument(String path, int offset,
+                                                        int maxChars) throws Exception {
+        if (!isPdf(path) && !isDocx(path)) {
+            throw new IllegalArgumentException("Only PDF and DOCX workspace files can be parsed");
+        }
+        String text;
+        try (InputStream input = repository.openWorkspaceFile(path)) {
+            text = isPdf(path) ? new PdfParse(this).parse(input) : WordParse.parse(input);
+        }
+        int start = Math.max(0, Math.min(offset, text.length()));
+        int end = Math.min(text.length(), start + Math.max(100, Math.min(maxChars, 20000)));
+        return new AgentClient.FileChunk(path, fileName(path), text.substring(start, end),
+                start, text.length());
+    }
+
+    private static boolean isPdf(String name) {
+        return name != null && name.toLowerCase(java.util.Locale.ROOT).endsWith(".pdf");
+    }
+
+    private static boolean isDocx(String name) {
+        return name != null && name.toLowerCase(java.util.Locale.ROOT).endsWith(".docx");
+    }
+
+    private static String fileName(String path) {
+        int slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        return slash < 0 ? path : path.substring(slash + 1);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -159,7 +189,8 @@ public final class AgentActivity extends AppCompatActivity {
                 startActivity(new Intent(this, ApiKeyActivity.class)));
         findViewById(R.id.agent_attach).setOnClickListener(view -> {
             if (generating) return;
-            wordPicker.launch(new String[]{
+            documentPicker.launch(new String[]{
+                    "application/pdf",
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             });
         });
@@ -272,16 +303,16 @@ public final class AgentActivity extends AppCompatActivity {
             return;
         }
         if (prompt.isEmpty() && pendingFiles.isEmpty()) return;
-        if (prompt.isEmpty()) prompt = getString(R.string.analyze_uploaded_word);
-        final List<UploadedWord> requestFiles = new ArrayList<>(pendingFiles);
+        if (prompt.isEmpty()) prompt = getString(R.string.analyze_uploaded_document);
+        final List<UploadedDocument> requestFiles = new ArrayList<>(pendingFiles);
         final List<AgentClient.FileAttachment> attachments = new ArrayList<>();
-        for (UploadedWord file : requestFiles) {
+        for (UploadedDocument file : requestFiles) {
             attachments.add(new AgentClient.FileAttachment(file.id, file.name, file.mimeType));
         }
         String visiblePrompt = prompt;
         if (!requestFiles.isEmpty()) {
             StringBuilder names = new StringBuilder(prompt).append("\n\n").append(getString(R.string.uploaded_files));
-            for (UploadedWord file : requestFiles) names.append("\n- ").append(file.name);
+            for (UploadedDocument file : requestFiles) names.append("\n- ").append(file.name);
             visiblePrompt = names.toString();
         }
         input.setText("");
@@ -339,8 +370,17 @@ public final class AgentActivity extends AppCompatActivity {
                 }
                 String answer = client.run(requestModel, context.summary, history, repository,
                         requestSmartSearch, requestSettings.tinyFishKey, attachments,
-                        (fileId, offset, maxChars) -> readUploadedWord(
-                                requestFiles, fileId, offset, maxChars), new AgentClient.Listener() {
+                        new AgentClient.FileReader() {
+                            @Override public AgentClient.FileChunk read(String fileId, int offset,
+                                                                        int maxChars) throws Exception {
+                                return readUploadedDocument(requestFiles, fileId, offset, maxChars);
+                            }
+
+                            @Override public AgentClient.FileChunk readPath(String path, int offset,
+                                                                            int maxChars) throws Exception {
+                                return readWorkspaceDocument(path, offset, maxChars);
+                            }
+                        }, new AgentClient.Listener() {
                     @Override public void onStatus(String value) { runOnUiThread(() -> { if (requestId == generationId) showStatus(value); }); }
                     @Override public void onText(String delta) {
                         runOnUiThread(() -> {
@@ -700,11 +740,12 @@ public final class AgentActivity extends AppCompatActivity {
             case "network_search": return "网络搜索";
             case "workspace_shell": return "文件工作区";
             case "read_word_file": return "Word 文件解析";
+            case "read_document": return "PDF / Word 解析";
             default: return name;
         }
     }
 
-    private void onWordFilesSelected(List<Uri> uris) {
+    private void onDocumentFilesSelected(List<Uri> uris) {
         if (uris == null || uris.isEmpty()) return;
         for (Uri uri : uris) {
             if (pendingFiles.size() >= 5) {
@@ -713,17 +754,20 @@ public final class AgentActivity extends AppCompatActivity {
                 break;
             }
             String name = displayName(uri);
-            if (!name.toLowerCase(java.util.Locale.ROOT).endsWith(".docx")) {
-                Snackbar.make(findViewById(R.id.agent_root), R.string.word_files_only,
+            String lowerName = name.toLowerCase(java.util.Locale.ROOT);
+            if (!lowerName.endsWith(".docx") && !lowerName.endsWith(".pdf")) {
+                Snackbar.make(findViewById(R.id.agent_root), R.string.document_files_only,
                         Snackbar.LENGTH_LONG).show();
                 continue;
             }
             boolean duplicate = false;
-            for (UploadedWord file : pendingFiles) {
+            for (UploadedDocument file : pendingFiles) {
                 if (file.uri.equals(uri)) duplicate = true;
             }
-            if (!duplicate) pendingFiles.add(new UploadedWord(UUID.randomUUID().toString(), name,
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", uri));
+            String mimeType = lowerName.endsWith(".pdf") ? "application/pdf"
+                    : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            if (!duplicate) pendingFiles.add(new UploadedDocument(
+                    UUID.randomUUID().toString(), name, mimeType, uri));
         }
         renderPendingFiles();
     }
@@ -737,13 +781,13 @@ public final class AgentActivity extends AppCompatActivity {
             }
         } catch (RuntimeException ignored) { }
         String fallback = uri.getLastPathSegment();
-        return fallback == null || fallback.trim().isEmpty() ? "document.docx" : fallback;
+        return fallback == null || fallback.trim().isEmpty() ? "document" : fallback;
     }
 
     private void renderPendingFiles() {
         if (attachmentList == null) return;
         attachmentList.removeAllViews();
-        for (UploadedWord file : new ArrayList<>(pendingFiles)) {
+        for (UploadedDocument file : new ArrayList<>(pendingFiles)) {
             MaterialButton chip = new MaterialButton(this, null,
                     com.google.android.material.R.attr.materialButtonOutlinedStyle);
             chip.setText(file.name + "  ×");
@@ -757,12 +801,16 @@ public final class AgentActivity extends AppCompatActivity {
         attachmentStrip.setVisibility(pendingFiles.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
-    private AgentClient.FileChunk readUploadedWord(List<UploadedWord> files, String fileId,
+    private AgentClient.FileChunk readUploadedDocument(List<UploadedDocument> files, String fileId,
                                                     int offset, int maxChars) throws Exception {
-        UploadedWord match = null;
-        for (UploadedWord file : files) if (file.id.equals(fileId)) match = file;
+        UploadedDocument match = null;
+        for (UploadedDocument file : files) if (file.id.equals(fileId)) match = file;
         if (match == null) throw new IllegalArgumentException("文件 ID 不存在");
-        if (match.text == null) match.text = new WordParse(this).parseFromUri(match.uri);
+        if (match.text == null) {
+            match.text = isPdf(match.name)
+                    ? new PdfParse(this).parseFromUri(match.uri)
+                    : new WordParse(this).parseFromUri(match.uri);
+        }
         int start = Math.max(0, Math.min(offset, match.text.length()));
         int end = Math.min(match.text.length(), start + Math.max(100, Math.min(maxChars, 20000)));
         return new AgentClient.FileChunk(match.id, match.name, match.text.substring(start, end),
@@ -784,14 +832,14 @@ public final class AgentActivity extends AppCompatActivity {
     }
 }
 
-final class UploadedWord {
+final class UploadedDocument {
     final String id;
     final String name;
     final String mimeType;
     final Uri uri;
     String text;
 
-    UploadedWord(String id, String name, String mimeType, Uri uri) {
+    UploadedDocument(String id, String name, String mimeType, Uri uri) {
         this.id = id;
         this.name = name;
         this.mimeType = mimeType;
