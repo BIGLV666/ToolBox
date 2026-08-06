@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="toolbox_ink">#202522</color>
+    <color name="toolbox_green">#2D6A50</color>
+    <color name="toolbox_green_dark">#1F4F3B</color>
+    <color name="toolbox_mint">#E4F1EA</color>
+    <color name="toolbox_cream">#F7F7F3</color>
+    <color name="toolbox_surface">#FFFFFF</color>
+    <color name="toolbox_orange">#B9653E</color>
+    <color name="toolbox_muted">#69716C</color>
+    <color name="toolbox_outline">#E3E7E3</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

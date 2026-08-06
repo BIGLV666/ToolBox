@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_history"
+        android:title="@string/conversation_history"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/action_new_chat"
+        android:title="@string/agent_new_chat"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/action_agent_settings"
+        android:title="@string/agent_settings"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_compress_memory"
+        android:title="@string/compress_memory_now"
+        app:showAsAction="never" />
+</menu>

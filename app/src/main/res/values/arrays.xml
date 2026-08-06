@@ -1,0 +1,17 @@
+<resources>
+    <string-array name="password_categories">
+        <item>@string/category_account</item>
+        <item>@string/category_work</item>
+        <item>@string/category_finance</item>
+        <item>@string/category_other</item>
+    </string-array>
+    <string-array name="agent_protocols">
+        <item>@string/protocol_chat</item>
+        <item>@string/protocol_responses</item>
+    </string-array>
+    <string-array name="memory_sizes">
+        <item>@string/memory_2000</item>
+        <item>@string/memory_3200</item>
+        <item>@string/memory_4000</item>
+    </string-array>
+</resources>

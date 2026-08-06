@@ -1,0 +1,18 @@
+<resources>
+    <style name="Base.Theme.ToolBox" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/toolbox_green</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorPrimaryContainer">@color/toolbox_mint</item>
+        <item name="colorOnPrimaryContainer">@color/toolbox_green_dark</item>
+        <item name="colorSecondary">@color/toolbox_orange</item>
+        <item name="android:colorBackground">@color/toolbox_cream</item>
+        <item name="colorSurface">@color/toolbox_surface</item>
+        <item name="colorOnSurface">@color/toolbox_ink</item>
+        <item name="colorOutline">@color/toolbox_outline</item>
+        <item name="colorOnSurfaceVariant">@color/toolbox_muted</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/toolbox_cream</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.ToolBox.Dialog</item>
+    </style>
+</resources>

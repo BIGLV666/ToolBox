@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="toolbox_muted">#69716C</color>
+    <color name="toolbox_outline">#E3E7E3</color>
+    <color name="toolbox_surface">#FFFFFF</color>
+    <color name="toolbox_mint">#E4F1EA</color>
+</resources>
