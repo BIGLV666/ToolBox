@@ -7,12 +7,17 @@
         <item name="colorSecondary">@color/toolbox_orange</item>
         <item name="android:colorBackground">@color/toolbox_cream</item>
         <item name="colorSurface">@color/toolbox_surface</item>
+        <item name="colorSurfaceContainer">@color/toolbox_surface_soft</item>
         <item name="colorOnSurface">@color/toolbox_ink</item>
         <item name="colorOutline">@color/toolbox_outline</item>
         <item name="colorOnSurfaceVariant">@color/toolbox_muted</item>
         <item name="android:fontFamily">sans</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowNoTitle">true</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@color/toolbox_cream</item>
+        <item name="toolbarStyle">@style/Widget.ToolBox.Toolbar</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.ToolBox.Dialog</item>
     </style>
 </resources>

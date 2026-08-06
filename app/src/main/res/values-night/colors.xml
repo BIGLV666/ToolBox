@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="toolbox_muted">#69716C</color>
-    <color name="toolbox_outline">#E3E7E3</color>
+    <color name="toolbox_ink">#18201C</color>
+    <color name="toolbox_green">#236247</color>
+    <color name="toolbox_green_dark">#174531</color>
+    <color name="toolbox_muted">#647069</color>
+    <color name="toolbox_outline">#DDE4DF</color>
     <color name="toolbox_surface">#FFFFFF</color>
-    <color name="toolbox_mint">#E4F1EA</color>
+    <color name="toolbox_surface_soft">#FAFCFA</color>
+    <color name="toolbox_cream">#F5F7F5</color>
+    <color name="toolbox_mint">#E3F1E9</color>
+    <color name="toolbox_sky">#E8F3F6</color>
+    <color name="toolbox_cloud">#EEF1F3</color>
+    <color name="toolbox_rain">#E4EDF2</color>
 </resources>
