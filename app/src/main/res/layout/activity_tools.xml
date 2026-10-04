@@ -71,6 +71,22 @@
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/library_smoking"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:clickable="true"
+                android:focusable="true"
+                app:cardBackgroundColor="@color/toolbox_surface"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="0dp"
+                app:rippleColor="@color/toolbox_mint"
+                app:strokeColor="@color/toolbox_outline"
+                app:strokeWidth="1dp">
+                <include layout="@layout/item_library_smoking" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/library_password"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

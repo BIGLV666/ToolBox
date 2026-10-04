@@ -74,7 +74,7 @@ public final class MarkdownRenderer {
             if (quote && end > start) {
                 result.setSpan(new QuoteSpan(), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
-            if (result.length() > 0 || raw.length() == 0) result.append('\n');
+            if (result.length() > 0 || raw.length()==0) result.append('\n');
         }
         if (result.length() > 0) result.delete(result.length() - 1, result.length());
         return result;

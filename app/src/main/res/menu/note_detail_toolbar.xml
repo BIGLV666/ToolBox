@@ -2,4 +2,5 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
     <item android:id="@+id/action_edit_note" android:title="@string/edit" app:showAsAction="always" />
     <item android:id="@+id/action_delete_note" android:title="@string/delete" app:showAsAction="never" />
+    <item android:id="@+id/action_note_encryption" android:title="@string/note_encryption_state_unset" app:showAsAction="never" />
 </menu>

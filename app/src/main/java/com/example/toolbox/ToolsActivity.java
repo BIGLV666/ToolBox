@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.toolbox.agent.ui.AgentActivity;
 import com.example.toolbox.note.NoteActivity;
+import com.example.toolbox.smoking.SmokingActivity;
 
 /**
  * 工具库导航页。
@@ -23,6 +24,7 @@ public final class ToolsActivity extends AppCompatActivity {
                 .setNavigationOnClickListener(view -> finish());
         findViewById(R.id.library_agent).setOnClickListener(view -> startActivity(new Intent(this, AgentActivity.class)));
         findViewById(R.id.library_notes).setOnClickListener(view -> startActivity(new Intent(this, NoteActivity.class)));
+        findViewById(R.id.library_smoking).setOnClickListener(view -> startActivity(new Intent(this, SmokingActivity.class)));
         findViewById(R.id.library_password).setOnClickListener(view -> {
             Intent intent = new Intent(this, MainActivity.class);
             intent.putExtra("open_password", true);

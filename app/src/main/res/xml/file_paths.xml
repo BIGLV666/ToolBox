@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 未启用云同步时的附件目录，行为与改造前一致。 -->
     <files-path name="note_attachments" path="note_attachments/" />
+    <!-- 启用云同步后，上传前与上传失败时保留的副本；上传成功即删除。 -->
+    <files-path name="note_pending" path="note_pending/" />
+    <!-- 本地没有副本时从云端按需取回的文件，交给外部应用打开后按时间清理。 -->
+    <cache-path name="note_cache" path="note_cache/" />
 </paths>

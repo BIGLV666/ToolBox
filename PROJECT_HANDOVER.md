@@ -113,7 +113,7 @@ Activity / Adapter
 数据库入口：`app/src/main/java/com/example/toolbox/repository/ToolboxDatabaseHelper.java`
 
 数据库名：`toolbox.db`  
-当前版本：`5`
+当前版本：`10`
 
 ### 5.1 表结构
 
@@ -125,9 +125,14 @@ Activity / Adapter
 | `agent_model` | Key 下的模型 | `model_id`、`key_id`、`name` |
 | `agent_conversation` | 对话 | `conversation_id`、`model_id`、`updated_at` |
 | `agent_message` | 对话消息 | `conversation_id`、`role`、`content`、`status` |
+| `agent_settings` | Agent 单行设置 | `settings_id`、`smart_search`、`memory_token_limit`、`tinyfish_encrypted_key`、`workspace_tree_uri` |
 | `note_folder` | 笔记文件夹 | `folder_id`、`name`、`updated_at` |
-| `note` | 笔记正文 | `note_id`、`title`、`content`、`folder_id` |
-| `note_attachment` | 附件元数据 | `note_id`、`uri`、`name`、`mime_type`、`size` |
+| `note` | 笔记（标题、正文、备注） | `note_id`、`title`、`content`(备注，仅本地)、`body`(正文，上云)、`folder_id`、`sync_id`、`sync_state`、`encrypted` |
+| `note_tombstone` | 删除墓碑（v13） | `sync_id`(PK)、`title`、`deleted_at`、`device_id`、`encrypted`、`payload_json`、`uploaded` |
+| `note_attachment` | 附件元数据 | `note_id`、`local_id`、`uri`、`name`、`mime_type`、`size`、`remote_key`、`md5`、`upload_state`、`local_path`、`encrypted`、`plain_sha256` |
+| `note_cloud_settings` | 附件云同步配置（单行） | `enabled`、`bucket`、`region`、`endpoint`、`prefix`、`delete_local`、`encrypted_ak`、`encrypted_sk`、`encrypted_mk`、`keyring_text` |
+| `note_cloud_trash` | 待过期的云端对象 | `bucket`、`object_key`、`requested_at`、`attempts` |
+| `smoking_record` | 抽烟记录 | `smoked_at` |
 
 ### 5.2 重点方法
 
@@ -149,6 +154,16 @@ Activity / Adapter
 - v3：增加 Agent 表
 - v4：增加笔记表
 - v5：旧笔记表增加文件夹能力
+- v6：增加 `agent_settings` 单行表
+- v7：`agent_message` 增加 token 统计字段
+- v8：`agent_settings` 增加 `workspace_tree_uri`
+- v9：增加 `smoking_record`
+- v10：附件支持云端存储，见 8.3
+- v11：正文上云（`sync_id`/`body`/`sync_state`）、附件加密标记、待过期表，`delete_local` 默认改为 1，并逐行回填 `sync_id`
+- v12：笔记可逐篇选择云端是否加密（`note.encrypted`，-1 未决定 / 0 明文 / 1 加密），并把历史上已上传的笔记与附件标记为加密
+- v13：删除传播——`note_tombstone` 墓碑表（含完整 payload_json 供重试与回收站）、配置表加 `device_id`
+
+注意 v10、v11 的分支条件：`ALTER` 只在 `oldVersion >= 4` 时执行，因为更早的版本会走 `createNoteTables()` 直接建成含新列的最新结构，重复 `ALTER` 会因字段已存在而失败；`note_cloud_settings` 的列只有 `oldVersion >= 10` 才需要补，因为这张表 v10 才出现。`CREATE TABLE IF NOT EXISTS` 与 `backfillSyncIds()` 对任何旧版本执行都安全。
 
 新增字段或表时必须同时：
 
@@ -547,14 +562,14 @@ Agent 搜索密码时：
 
 #### `NoteActivity.onFilePicked()`
 
-位置：`NoteActivity.java:310`
+位置：`NoteActivity.java:351`
 
-- 使用系统 `OpenDocument`
-- 尝试持久化 URI 读取权限
-- 数据库只保存 URI、文件名、MIME、大小
-- 不复制文件内容
+- 使用系统 `OpenDocument`，但换成自定义契约 `OpenDocumentWithWrite`：默认契约只保证读权限，而删除手机上的原文件需要写权限
+- 尝试持久化源 URI 的读写权限；写权限拿不到时退化为只读，上传仍可完成，删除原文件会失败并如实提示
+- 在主线程读取文件名、大小、MIME，随后整段处理交给后台执行器
+- 走云端还是本地在**后台线程**判断：云同步配置可能尚未加载完，过早判断会把附件错误地按本地方式保存
 
-部分 Provider 不支持持久授权，应用重启后附件可能无法再次打开。
+未启用云同步时退回本地复制路径（复制进 `filesDir/note_attachments`，此后不依赖源文件）；启用后的落盘位置与状态见 8.3。
 
 #### `MarkdownRenderer.render()`
 
@@ -570,6 +585,154 @@ Agent 搜索密码时：
 - `http/https` 链接
 
 不支持嵌套、转义、代码块、图片、表格和相对链接。
+
+### 8.3 云端同步与加密
+
+相关文件：
+
+- 签名与传输：`cloud/S3Signer.java`、`cloud/CloudClient.java`、`cloud/CloudException.java`
+- 加密：`cloud/NoteCipher.java`、`cloud/Keyring.java`（都是纯 JDK，可在 `NoteCipherTest` 里验证）
+- 对象键规则：`cloud/ObjectKeys.java`
+- 正文同步：`cloud/NoteSyncClient.java`
+- 到期清理：`cloud/QiniuManagementClient.java`（七牛原生管理接口，不是 S3 兼容接口）
+- 配置与凭据持久化：`cloud/CloudRepository.java`（单行表 `note_cloud_settings`）
+- 设置页：`note/ui/NoteCloudSettingsActivity.java`
+- 单元测试：`app/src/test/java/com/example/toolbox/cloud/NoteCipherTest.java`
+
+#### 加密范围与逐篇选择
+
+**加密的是内容，不加密文件名。** 对象键直接用原始文件名，以便在七牛控制台一眼认出是哪个文件；文件名泄露的只是"存在这么个文件"，内容仍是密文。
+
+**是否加密按笔记逐篇决定**（`note.encrypted`：`-1` 未决定 / `0` 明文 / `1` 加密）。正文与它的附件共用同一个选择：附件跟着笔记走，不单独设。首次上传前问一次，之后在笔记详情的工具栏菜单里切换，改动只影响下一次上传。
+
+- 未决定时 `NoteRepository.Note.encryptsUpload()` 返回 true——默认走安全的一侧，不会因为漏问而把内容明文传出去。
+- 明文上传不需要口令，因此没设口令也能用；设为加密而未解锁时，上传会保持"待上传"并提示，不会退化成明文。
+
+**是否加密由内容自描述，不依赖本地标记。** 加密内容以 `TBXC` 魔数开头，明文就是普通 JSON/文件。`CloudClient.getObject()` 先窥探开头 4 字节，是魔数就解密、否则原样复制；内容加密而调用方没给密钥时直接报错，而不是把密文当文件交出去。这样做的好处是恢复场景下判断永远准确——全新安装根本没有本地标记。恢复出的笔记，其 `encrypted` 就取自这次嗅探结果。
+
+**备注不参与上传**：`note.content`（备注）只存在本机 SQLite，`NoteSyncClient.Payload` 里没有这个字段，因此在实现层面就不可能被传出去。
+
+#### 密钥层次
+
+```text
+口令 ──PBKDF2-HMAC-SHA256(salt, 210000 次)──▶ KEK（只用来包裹主密钥）
+随机主密钥 MK ──AES-GCM(KEK)──▶ keyring
+MK ──HMAC-SHA256(MK, "file:<对象键>") / "note:<syncId>"──▶ 单个对象的密钥
+```
+
+- keyring 明文存云端 `notes/_meta/keyring.txt`：它只含被口令包裹的 MK，本身不含可用密钥。
+- **主密钥与对象密钥分离**：改口令只需用新 KEK 重新包裹 MK，云端已上传的内容一个都不用重传。
+- 本机把 MK 用 Keystore 缓存（`note_cloud_settings.encrypted_mk`），日常免输入口令；缓存不可用时视为未解锁，此时**不会退化成明文上传**，而是提示先去设置口令。
+- 附件的内容密钥由对象键派生、正文的由 `syncId` 派生：键本身唯一且已保存，所以不需要额外保存任何密钥材料。
+- 忘记口令 = 云端内容永久不可读（本地明文还在）。keyring 解不开即口令错误，GCM 认证标签天然充当校验值。
+
+#### 分块格式，以及为什么先落临时文件
+
+```text
+magic "TBXC"(4) | 版本(1) | 块大小(4) | 保留(3) | nonce 前缀(8) | 分块密文…
+每块 = AES-GCM(对象密钥, nonce = 前缀||块计数, 明文块, AAD = 块计数) → 密文 + 16B tag
+```
+
+- 分块而非整体加密：GCM 不能在流式中途产出 tag，整体加密要把文件全读进内存，几十 MB 的 PDF 会 OOM。块计数同时进 nonce 与 AAD，**重排、截断、拼接都会解密失败**。
+- 上传是"先把密文写到临时文件、再走普通上传"：签名要求请求头带请求体的 SHA-256，而密文因随机 nonce 无法提前算出；用 `UNSIGNED-PAYLOAD` 依赖服务端支持（未验证），读进内存又会 OOM。代价是一次临时磁盘写入，上传结束立即删除。
+- **校验分两层**：`UploadResult.isVerified()` 比对服务端 ETag 与**密文** MD5（证明密文完整到达）；`plain_sha256` 在下载解密后再比对一次（证明解出来的就是原文件）。少任何一层都可能漏掉静默损坏。
+
+#### 对象键
+
+- 附件：`notes/<安全化的原始文件名>`；重名时 `availableKey()` 依次探测 `名字_2.ext`、`名字_3.ext`……**绝不允许覆盖云端已有对象**。
+- 正文：`notes/meta/<syncId>.json`（稳定标识，不会因为改标题而变成孤儿对象）。
+- 加密凭据：`notes/_meta/keyring.txt`。
+
+#### 删除与到期
+
+删除笔记时**不立即删云端对象**，而是把对象键收进 `note_cloud_trash`，再调七牛原生接口设为 7 天后过期：
+
+```text
+POST /deleteAfterDays/<urlsafe-base64("空间名:对象键")>/7      Host: rs.qiniuapi.com
+Authorization: Qiniu <AK>:<HMAC-SHA1("POST " + path + "\nHost: rs.qiniuapi.com\n\n")>
+```
+
+- 收集对象键必须与删除处于**同一事务且顺序在前**：附件行一删，`remote_key` 就再也找不回来，云端对象会永久残留（这正是第一版漏掉的链路）。
+- 服务端返回 612（资源不存在）视为完成；其余失败累加 `attempts` 留在队列，应用下次启动或再次删除时重试。
+- `deleteAfterDays` 的 N 天是相对上传时间还是相对设置时间，文档没有明确；设置后会用 `stat` 把服务端返回的 `expiration` 写进日志（TAG `NoteActivity`），真机首次运行即可确认。两种语义都不会有害。
+
+#### 本地文件处理
+
+应用目录里的私有副本上传成功后一律删除（不设开关）。手机上的原始文件按 `delete_local` 三档处理：
+
+| 值 | 行为 |
+|---|---|
+| 0 | 保留原文件 |
+| 1 | 总是删除（**默认**，只留云端） |
+| 2 | 每个文件上传完成后询问一次 |
+
+- 「每次询问」由 `deleteAskShowing` 与弹窗的 dismiss 回调串行驱动，多文件同时完成也不会叠弹窗。
+- 删除原文件是尽力而为：文件管理器、下载目录的文档 URI 一般可删，网盘或聊天软件的虚拟文档通常不支持；失败时提示手动清理，绝不谎报成功。
+- 任何一档都以"服务端校验通过"为前提。
+
+#### 正文同步与恢复
+
+- `saveNote()` 每次保存都会重传一遍正文。不用"仅标题/正文变化才传"是为了让**附件清单**跟着更新：只在变化时上传，会让"先传附件、后保存笔记"这条路径上的清单永远停留在旧版本，结果是换设备恢复时正文回来了、附件却认不出属于哪篇笔记。正文密文只有几 KB，这点流量不值得那个风险。
+- 云端 JSON 为 `{v, syncId, title, body, folderName, createdAt, updatedAt, attachments[]}`；`attachments` 是附件清单（名字、对象键、大小、类型、md5、明文摘要、是否加密），**没有它就无法把附件恢复回正确的笔记**。注意这是 v11 之后才加入的字段，更早上传的对象里没有清单，重新保存一次该笔记即可补上。
+- 文件夹按**名字**同步，`folder_id` 跨设备没有意义。
+- **后写赢**：不做云端比对，本地 `updatedAt` 更大的一方直接覆盖。多设备同时改同一篇会丢一次远程修改——这是选定策略，不是缺陷。
+- 恢复入口在设置页：列举 `notes/meta/` → 逐个下载解密 → 按 `syncId` 合并（本地没有则插入，云端更新则覆盖）。合并时**绝不覆盖备注**。
+
+#### 附件文件的落盘位置与命名
+
+私有副本、缓存等一律放在**应用私有目录**，从不写共享存储：`filesDir/note_pending/<uuid>/<原始文件名>`（上传前的副本）、`filesDir/note_attachments/<uuid>/<原始文件名>`（本地模式）、`cacheDir/note_cache/<localId>/<原始文件名>`（按需下载）。
+
+**每个附件一个子目录、文件名用原始名**，原因有两个：同名文件不会互相覆盖；把文件通过 FileProvider 交给外部应用打开时，对方看到的是用户自己的文件名，而不是一串 uuid 前缀。代价是目录多了一层，因此两处按目录结构写的逻辑必须配套维护：
+
+- `referencedAttachmentFiles()` 还原被引用文件时，直接用 `new File(filesDir, uri.getPath())`——本应用 FileProvider 的 URI 路径就是 filesDir 下的相对路径。**不要按"取最后一段文件名去各目录里找"的方式还原**，子目录结构下会还原错、进而误删仍在使用的附件。
+- `deleteUnreferenced()` 与 `deleteStale()` 都要递归进子目录，并在清空后回收空目录。
+
+#### 双端同步协议（payload v2）
+
+PC 端（`D:\AndroidProjects\pc-notes`，Python）与手机端共享同一云端库并字节级互通。payload v2 在
+`{v, syncId, title, body, folderName, createdAt, updatedAt, attachments[]}` 基础上增加
+`deleted / deletedAt / deviceId`。
+
+- **权威索引在云端**：`notes/meta/` 就是唯一索引，两端的本地 SQLite 只是可重建的缓存。
+  同步循环（`NoteActivity.syncNow()`）：① 拉取（列出 meta/ → 逐个下载 → 墓碑落地或正文合并）
+  → ② 推送（`sync_state ≠ 已同步` 的正文 + 未上传的墓碑；已墓碑的笔记绝不再上传）
+  → ③ 处理待过期队列。触发点：进入笔记页（静默）、列表菜单「立即同步」。
+- **删除传播**：删除时把 meta 对象覆盖成「完整 payload + deleted:true + deletedAt + deviceId」
+  （内容完整保留，回收站才能找回），本地 `note_tombstone` 落一行（含 payload_json，上传失败可重试）。
+  过期分级：附件等内容对象 7 天，meta 墓碑 30 天（`processTrashQueue` 按 `/meta/` 前缀区分）。
+  另一端同步到墓碑后删除本地并记录自己的墓碑；**本地墓碑永久保留**，保证已删笔记不会被任何一端复活。
+  「删了又改」例外：云端 payload 的 updatedAt 比本地墓碑的删除时间新时，复活并清墓碑。
+- **冲突备份**：合并覆盖前，若本地有未同步修改（`sync_state ≠ SYNCED`），把本地版另存一篇
+  「标题（冲突备份 时间）」；本地没有未同步修改时覆盖是无损的，不备份。
+- **附件回收**：`save()` 在删除旧附件行之前，把"上传过但不在本次清单里"的 `remote_key`
+  写进待过期队列——移除附件不再泄漏云端对象。
+- **文件夹自动创建**：合并/恢复时按 folderName 找不到文件夹就新建（两端同规则），结构自然双向。
+- PC 端对应实现：`pc-notes/app/sync.py`（sync_now / pull_from_cloud / upload_tombstone）、
+  `app/db.py`（同构墓碑表与合并规则），回收站页面在其设置页；协议兼容性由 PC 端 87 项 pytest 与
+  Java↔Python 加解密交叉验证（`crosscheck/`）保障。
+
+#### 打开附件的回退顺序
+
+待上传（点按重试）→ `local_path` 私有副本 → `uri` 原始文件 → 云端按需下载到 `cacheDir/note_cache`（解密 + 明文摘要复核）。缓存保留 6 小时后再由 `clearStaleCache()` 清理，避免打断仍在读取的外部阅读器。
+
+历史附件（本次改造前上传的）`encrypted = 0`，下载时不做解密。`upload_state`：`0` 待上传、`1` 已上传、`2` 上传失败；改造前的仅本地附件不会被自动上传。
+
+#### 孤儿文件清理
+
+`NoteActivity.purgeOrphanFiles()` 在页面创建时扫描 `note_pending` 与 `note_attachments`，删除**没有任何附件记录引用**的文件。会产生残留的三种情况：上传失败或未解锁口令后用户放弃了该笔记；添加附件但没保存就退出（附件行从未落库）；本地模式下随笔记删除遗留的副本——最后这条在改造前一直缺失，文件只增不减。
+
+两个保护：判定"被引用"时对 FileProvider 的 content URI 同时按两种目录尝试还原（宁可少删，多留一轮不会出错，误删会丢数据）；10 分钟内刚写入的文件一律跳过，因为正在上传的副本此刻可能还没落库。
+
+#### 服务端准备
+
+1. 建 IAM 用户，策略资源用简化 QRN：`qrn:kodo:::biglv-test1/notes/*`（文档说明 zone 与 uid 可省略）。
+2. 动作需覆盖该前缀下对象的上传、下载与列举；具体动作名以控制台策略编辑器提供的列表为准。到期设置走的是管理接口（`rs.qiniuapi.com`），不经 IAM 对象动作，但用的是同一对 AK/SK。
+3. 把 AK/SK 填进设置页；密钥经 `ApiKeyCipher` 加密后落库，明文不落库。
+
+#### 本次未做
+
+正文冲突自动合并（用后写赢代替）；附件级备注；本地数据库加密；历史明文附件的批量重新加密（靠 `encrypted` 标记共存）。
+
 
 ## 9. 首页天气与公共交互
 

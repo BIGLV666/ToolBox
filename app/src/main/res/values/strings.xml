@@ -198,4 +198,123 @@
     <string name="uploaded_files">上传文件：</string>
     <string name="analyze_uploaded_document">Analyze the uploaded PDF or Word document</string>
     <string name="document_files_only">Only PDF and DOCX files are supported</string>
+    <string name="smoking_module">抽烟统计</string>
+    <string name="smoking_module_desc">记录每一支烟，统计日与月</string>
+    <string name="smoking_title">抽烟统计</string>
+    <string name="smoking_subtitle">所有数据仅保存在这台设备</string>
+    <string name="smoking_add">记一支</string>
+    <string name="smoking_add_desc">点击记录当前时间</string>
+    <string name="smoking_today">今日</string>
+    <string name="smoking_this_month">本月</string>
+    <string name="smoking_tab_day">今日明细</string>
+    <string name="smoking_tab_month">本月明细</string>
+    <string name="smoking_recorded">已记录</string>
+    <string name="smoking_undo">撤销</string>
+    <string name="smoking_long_press_delete">长按删除</string>
+
+    <!-- 笔记附件的云同步：设置页 -->
+    <string name="cloud_entry">云同步</string>
+    <string name="cloud_settings">云同步设置</string>
+    <string name="cloud_enabled">启用云端存储</string>
+    <string name="cloud_enabled_desc">关闭时附件仍只保存在本机，行为与启用前一致。</string>
+    <string name="cloud_bucket">空间名（bucket）</string>
+    <string name="cloud_bucket_desc">对象存储的空间名。若该名称已被他人占用，S3 侧的 bucket 名会由系统另外生成，此时以控制台显示的为准。</string>
+    <string name="cloud_region">区域</string>
+    <string name="cloud_endpoint_value">请求端点：%1$s（由区域决定，不能单独修改）</string>
+    <string name="cloud_prefix">对象前缀</string>
+    <string name="cloud_prefix_desc">建议保留 notes/，并让 IAM 策略只授权该前缀。</string>
+    <string name="cloud_credentials">访问凭据</string>
+    <string name="cloud_credentials_desc">建议使用七牛 IAM 子账号，策略只授权本空间的前缀。密钥经系统 Keystore 加密后保存，不以明文落库。</string>
+    <string name="cloud_access_key">AccessKey</string>
+    <string name="cloud_secret_key">SecretKey</string>
+    <string name="cloud_local_file">本地文件</string>
+    <string name="cloud_delete_local">上传成功后删除手机上的原文件</string>
+    <string name="cloud_delete_local_desc">删除不可撤销。只有在服务端校验通过（ETag 与本地摘要一致）之后才会执行删除；来自网盘或聊天软件的文档可能无法自动删除，届时会提示手动清理。</string>
+    <string name="cloud_test">测试连接</string>
+    <string name="cloud_testing">正在连接…</string>
+    <string name="cloud_test_ok">连接正常，该前缀下已有 %1$d 个对象</string>
+    <string name="cloud_test_failed">连接失败：%1$s</string>
+    <string name="cloud_incomplete">请先填写空间名与密钥</string>
+    <string name="cloud_saved">设置已保存</string>
+    <string name="cloud_credential_saved">已保存凭据：%1$s</string>
+    <string name="cloud_error_access_key">AccessKey 无效，请重新复制，注意不要混入空格</string>
+    <string name="cloud_error_signature">签名不匹配，请确认所选区域与空间所在区域一致</string>
+    <string name="cloud_error_denied">权限不足，请检查 IAM 策略是否授权了该前缀的读写与列举</string>
+    <string name="cloud_error_bucket">空间不存在，请确认空间名是对象存储侧的 bucket 名</string>
+
+    <!-- 笔记附件的云同步：附件上传状态 -->
+    <string name="attachment_pending">待上传</string>
+    <string name="attachment_uploading">上传中</string>
+    <string name="attachment_uploaded">已上传</string>
+    <string name="attachment_upload_failed">上传失败</string>
+    <string name="attachment_remote_only">仅云端</string>
+    <string name="attachment_uploaded_keep_local">已上传到云端</string>
+    <string name="attachment_uploaded_local_deleted">已上传到云端，手机上的原文件已删除</string>
+    <string name="attachment_local_delete_failed">已上传到云端，但原文件未能自动删除，请手动清理</string>
+    <string name="attachment_upload_failed_retry">上传失败，点击可重试</string>
+    <string name="attachment_upload_failed_detail">上传失败：%1$s</string>
+    <string name="attachment_cloud_disabled">云同步未启用，附件保存在本机</string>
+    <string name="attachment_downloading">正在从云端获取…</string>
+    <string name="attachment_download_failed">从云端获取失败：%1$s</string>
+    <string name="attachment_local_missing">附件已在本地删除，将从云端获取</string>
+
+    <!-- 加密口令 -->
+    <string name="cloud_passphrase">加密口令</string>
+    <string name="cloud_passphrase_desc">用于加密上传的正文与附件内容。文件名不加密，方便在控制台辨认。忘记口令将无法解密云端内容，本地数据不受影响。</string>
+    <string name="cloud_passphrase_set">设置口令</string>
+    <string name="cloud_passphrase_unlock">解锁</string>
+    <string name="cloud_passphrase_change">修改口令</string>
+    <string name="cloud_passphrase_confirm">再次输入口令</string>
+    <string name="cloud_passphrase_mismatch">两次输入的口令不一致</string>
+    <string name="cloud_passphrase_too_short">口令至少 8 位</string>
+    <string name="cloud_passphrase_ready">已解锁，本机免输入</string>
+    <string name="cloud_passphrase_absent">尚未设置口令，云端同步不可用</string>
+    <string name="cloud_passphrase_wrong">口令不正确</string>
+    <string name="cloud_passphrase_saved">口令已保存，本机记住了解锁状态</string>
+    <string name="cloud_passphrase_changed">口令已更换，云端内容无需重新上传</string>
+
+    <!-- 删除本地文件的三档策略 -->
+    <string name="cloud_delete_mode">上传成功后处理手机上的原文件</string>
+    <string name="cloud_delete_keep">保留原文件</string>
+    <string name="cloud_delete_always">总是删除（只留云端）</string>
+    <string name="cloud_delete_ask">每个文件都问一次</string>
+
+    <!-- 询问删除 -->
+    <string name="attachment_ask_delete_title">删除手机上的原文件？</string>
+    <string name="attachment_ask_delete_message">%1$s 已上传到云端并校验通过。删除后本地不再保留，需要时从云端取回。</string>
+    <string name="attachment_ask_delete_keep">保留</string>
+
+    <!-- 从云端恢复 -->
+    <string name="cloud_restore">从云端恢复笔记</string>
+    <string name="cloud_restore_running">正在从云端恢复…</string>
+    <string name="cloud_restore_done">恢复完成：新增 %1$d 篇，更新 %2$d 篇</string>
+    <string name="cloud_restore_none">云端没有可恢复的正文</string>
+    <string name="cloud_restore_failed">恢复失败：%1$s</string>
+    <string name="cloud_restore_empty_body">其中 %1$d 篇的云端正文为空：那些文字可能记在「备注」里，而备注只存本机、不上云。</string>
+    <string name="cloud_restore_attachments">恢复了 %1$d 个附件记录，文件会在打开时按需从云端取回。</string>
+    <string name="cloud_restore_failed_notes">有 %1$d 篇没能恢复：它们的云端内容是加密的，需要先在下面设置并解锁口令。</string>
+
+    <!-- 正文字段 -->
+    <string name="note_body_hint">正文（加密后上传云端）</string>
+    <string name="note_remark">备注</string>
+    <string name="note_remark_hint">备注（仅保存在本机，不上传）</string>
+    <string name="note_body_synced">正文已同步</string>
+    <string name="note_body_sync_failed">正文同步失败，稍后会自动重试</string>
+    <string name="note_body_sync_skipped">尚未设置加密口令，正文未上传</string>
+
+    <!-- 逐篇选择是否加密上传 -->
+    <string name="note_encryption_menu">云端加密方式：%1$s</string>
+    <string name="note_encryption_ask_title">这篇笔记要加密上传吗？</string>
+    <string name="note_encryption_ask_message">加密：云端是密文，只有输入口令才能打开。\n明文：云端内容可直接查看，也能用分享链接发给别人。\n\n只问这一次，之后可以在右上角菜单里修改。</string>
+    <string name="note_encryption_encrypted">加密上传</string>
+    <string name="note_encryption_plain">明文上传</string>
+    <string name="note_encryption_state_unset">未设定</string>
+    <string name="note_encryption_state_encrypted">云端：加密</string>
+    <string name="note_encryption_state_plain">云端：明文</string>
+    <string name="note_encryption_changed">已改为「%1$s」，下次上传生效</string>
+
+    <!-- 双端同步 -->
+    <string name="sync_now">立即同步</string>
+    <string name="sync_result">同步完成：新增 %1$d · 更新 %2$d · 删除 %3$d · 推送 %4$d</string>
+    <string name="sync_failed_partial">（%1$d 项失败，详见日志）</string>
 </resources>

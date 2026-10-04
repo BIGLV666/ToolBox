@@ -29,10 +29,17 @@
                 android:resource="@xml/file_paths" />
         </provider>
         <activity
+            android:name=".smoking.SmokingActivity"
+            android:exported="false" />
+        <activity
             android:name=".agent.ui.AgentSettingsActivity"
             android:exported="false" />
         <activity
             android:name=".note.NoteActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".note.ui.NoteCloudSettingsActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
         <activity

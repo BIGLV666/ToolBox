@@ -241,10 +241,7 @@ public class MainActivity extends AppCompatActivity implements PasswordAdapter.L
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
-        if (passwordPage != null && passwordPage.getVisibility() == View.VISIBLE
-                && passwordSwipeBack != null && passwordSwipeBack.handle(event)) {
-            return true;
-        }
+        if (passwordSwipeBack != null && passwordSwipeBack.handle(event)) return true;
         return super.dispatchTouchEvent(event);
     }
 
